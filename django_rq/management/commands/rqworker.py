@@ -1,8 +1,11 @@
+from distutils.version import LooseVersion
 import os
 import importlib
 import logging
+import sys
 
 from django.core.management.base import BaseCommand
+from django.utils.version import get_version
 
 from django_rq.queues import get_queues
 from django_rq.workers import get_exception_handlers
@@ -43,11 +46,13 @@ class Command(BaseCommand):
     args = '<queue queue ...>'
 
     def add_arguments(self, parser):
+        parser.add_argument('queues', nargs='*', type=str,
+                            help='The queues to work on, separated by space')
         parser.add_argument('--worker-class', action='store', dest='worker_class',
                             default='rq.Worker', help='RQ Worker class to use')
         parser.add_argument('--pid', action='store', dest='pid',
                             default=None, help='PID file to write the worker`s pid into')
-        parser.add_argument('--burst', action='store', dest='burst',
+        parser.add_argument('--burst', action='store_true', dest='burst',
                             default=False, help='Run worker in burst mode')
         parser.add_argument('--name', action='store', dest='name',
                             default=None, help='Name of the worker')
@@ -56,9 +61,10 @@ class Command(BaseCommand):
         parser.add_argument('--worker-ttl', action='store', type=int,
                             dest='worker_ttl', default=420,
                             help='Default worker timeout to be used')
+        if LooseVersion(get_version()) >= LooseVersion('1.9'):
+            parser.add_argument('args', nargs='*')
 
     def handle(self, *args, **options):
-
         pid = options.get('pid')
         if pid:
             with open(os.path.expanduser(pid), "w") as fp:
@@ -67,7 +73,7 @@ class Command(BaseCommand):
         try:
             # Instantiate a worker
             worker_class = import_attribute(options['worker_class'])
-            queues = get_queues(*args, queue_class=import_attribute(options['queue_class']))
+            queues = get_queues(*options.get('queues'), queue_class=import_attribute(options['queue_class']))
             w = worker_class(
                 queues,
                 connection=queues[0].connection,
@@ -82,3 +88,4 @@ class Command(BaseCommand):
             w.work(burst=options.get('burst', False))
         except ConnectionError as e:
             print(e)
+            sys.exit(1)
