@@ -1,3 +1,5 @@
+import sys
+
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import six
@@ -5,6 +7,7 @@ from django.utils import six
 import redis
 from rq.utils import import_attribute
 from rq.queue import FailedQueue, Queue
+from rediscluster import StrictRedisCluster
 
 from django_rq import thread_queue
 
@@ -104,7 +107,14 @@ def get_redis_connection(config, use_strict_redis=False):
     if 'UNIX_SOCKET_PATH' in config:
         return redis_cls(unix_socket_path=config['UNIX_SOCKET_PATH'], db=config['DB'])
 
-    return redis_cls(host=config['HOST'], port=config['PORT'], db=config['DB'], password=config.get('PASSWORD', None))
+    if 'CLUSTER_NODES' in config:
+        return StrictRedisCluster(startup_nodes=config['CLUSTER_NODES'],
+                                  password=config.get('PASSWORD', None),
+                                  decode_responses=sys.version_info[0] >= 3)
+
+    return redis_cls(host=config['HOST'], port=config['PORT'], db=config['DB'],
+                     password=config.get('PASSWORD', None),
+                     socket_keepalive=config.get('SOCKET_KEEPALIVE', False))
 
 
 def get_connection(name='default', use_strict_redis=False):
