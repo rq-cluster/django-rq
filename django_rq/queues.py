@@ -108,9 +108,13 @@ def get_redis_connection(config, use_strict_redis=False):
         return redis_cls(unix_socket_path=config['UNIX_SOCKET_PATH'], db=config['DB'])
 
     if 'CLUSTER_NODES' in config:
-        return StrictRedisCluster(startup_nodes=config['CLUSTER_NODES'],
-                                  password=config.get('PASSWORD', None),
-                                  decode_responses=sys.version_info[0] >= 3)
+        return StrictRedisCluster(
+            startup_nodes=config['CLUSTER_NODES'],
+            password=config.get('PASSWORD', None),
+            # NOTE: set decode_responses to False even for Python 3, since it's
+            # NOTE: only used for pubsub and I am not using pubsub.
+            # decode_responses=sys.version_info[0] < 3,
+            socket_keepalive=config.get('SOCKET_KEEPALIVE', False))
 
     return redis_cls(host=config['HOST'], port=config['PORT'], db=config['DB'],
                      password=config.get('PASSWORD', None),
